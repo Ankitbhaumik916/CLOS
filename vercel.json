@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd CLOS && npm install && npm run build",
+  "outputDirectory": "CLOS/dist",
+  "framework": "vite"
+}
