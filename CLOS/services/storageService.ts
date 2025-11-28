@@ -1,15 +1,26 @@
 
 import { ZomatoOrder } from "../types";
+import { authService } from "./authService";
 
-const STORAGE_KEY = "cloud_kitchen_orders_v1";
+/**
+ * User-aware persistent storage using localStorage.
+ * Data is keyed per user email so each user has their own dataset.
+ */
+
+function getStorageKey(): string {
+  const session = authService.getSession();
+  const email = session?.email || 'guest';
+  return authService.getUserDataKey(email);
+}
 
 export const storageService = {
   /**
-   * Load all orders from local storage
+   * Load all orders from local storage for the current user
    */
   loadOrders: (): ZomatoOrder[] => {
     try {
-      const data = localStorage.getItem(STORAGE_KEY);
+      const key = getStorageKey();
+      const data = localStorage.getItem(key);
       return data ? JSON.parse(data) : [];
     } catch (error) {
       console.error("Failed to load orders from storage", error);
@@ -22,6 +33,7 @@ export const storageService = {
    */
   saveOrders: (newOrders: ZomatoOrder[]): ZomatoOrder[] => {
     try {
+      const key = getStorageKey();
       const existing = storageService.loadOrders();
       
       // Create a Map for deduplication based on Order ID
@@ -30,7 +42,7 @@ export const storageService = {
       // Load existing first
       existing.forEach(o => orderMap.set(o.orderId, o));
       
-      // Add new (overwriting if ID exists, or you could skip. Overwriting ensures updates)
+      // Add new (overwriting if ID exists to ensure updates)
       newOrders.forEach(o => orderMap.set(o.orderId, o));
       
       const merged = Array.from(orderMap.values());
@@ -38,7 +50,7 @@ export const storageService = {
       // Sort by date desc
       merged.sort((a, b) => b.orderPlacedAt - a.orderPlacedAt);
       
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      localStorage.setItem(key, JSON.stringify(merged));
       return merged;
     } catch (error) {
       console.error("Failed to save orders", error);
@@ -48,9 +60,10 @@ export const storageService = {
   },
 
   /**
-   * Clear all stored data
+   * Clear all stored data for the current user
    */
   clearOrders: () => {
-    localStorage.removeItem(STORAGE_KEY);
+    const key = getStorageKey();
+    localStorage.removeItem(key);
   }
 };

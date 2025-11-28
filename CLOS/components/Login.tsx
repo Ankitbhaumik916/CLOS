@@ -23,16 +23,24 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setError("All fields are required.");
         return;
       }
-      const success = authService.signup({ name, email, password });
-      if (success) {
+      const result = authService.signup({ name, email, password });
+      if (result.success) {
         const user = authService.login(email, password);
-        if (user) onLogin(user);
+        if (user) {
+          setError('');
+          onLogin(user);
+        }
       } else {
-        setError("User already registered.");
+        setError(result.message);
       }
     } else {
+      if (!email || !password) {
+        setError("Email and access key are required.");
+        return;
+      }
       const user = authService.login(email, password);
       if (user) {
+        setError('');
         onLogin(user);
       } else {
         setError("Invalid email or access key.");

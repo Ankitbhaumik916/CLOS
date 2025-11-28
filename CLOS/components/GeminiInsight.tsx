@@ -1,7 +1,7 @@
-
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ZomatoOrder, InsightResponse } from '../types';
 import { analyzeKitchenData } from '../services/geminiService';
+import { askAI } from '../services/qaService';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 interface GeminiInsightProps {
@@ -9,9 +9,27 @@ interface GeminiInsightProps {
   userName: string;
 }
 
+interface ChatMessage {
+  role: 'user' | 'ai';
+  content: string;
+  timestamp: number;
+}
+
 const GeminiInsight: React.FC<GeminiInsightProps> = ({ orders, userName }) => {
   const [insight, setInsight] = useState<InsightResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [chatMessages]);
 
   const handleGenerateInsight = async () => {
     if (orders.length === 0) return;
@@ -24,17 +42,37 @@ const GeminiInsight: React.FC<GeminiInsightProps> = ({ orders, userName }) => {
     }
   };
 
+  const handleAskQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || orders.length === 0 || chatLoading) return;
+
+    const userMessage = chatInput;
+    setChatInput('');
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage, timestamp: Date.now() }]);
+    setChatLoading(true);
+
+    try {
+      const aiResponse = await askAI(userMessage, orders, userName);
+      setChatMessages(prev => [...prev, { role: 'ai', content: aiResponse, timestamp: Date.now() }]);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to get AI response';
+      setChatMessages(prev => [...prev, { role: 'ai', content: `Error: ${errorMsg}`, timestamp: Date.now() }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
   const profitData = insight ? [
-    { name: 'Net Revenue', value: insight.profitabilityAnalysis.estimatedNet, color: '#10b981' }, // Emerald
-    { name: 'Zomato Cut (35%)', value: insight.profitabilityAnalysis.zomatoCommission, color: '#f97316' }, // Orange
+    { name: 'Net Revenue', value: insight.profitabilityAnalysis.estimatedNet, color: '#10b981' },
+    { name: 'Zomato Cut (35%)', value: insight.profitabilityAnalysis.zomatoCommission, color: '#f97316' },
   ] : [];
 
   return (
-    <div className="bg-[#1c1c1e] p-8 rounded-xl border border-white/5 shadow-2xl min-h-[600px] flex flex-col items-center">
+    <div className="bg-[#1c1c1e] p-8 rounded-xl border border-white/5 shadow-2xl min-h-[600px] flex flex-col">
       
-      {!insight && !loading && (
-        <div className="max-w-xl mx-auto space-y-8 text-center py-10">
-            <div className="relative w-24 h-24 mx-auto">
+      {!insight && !loading && chatMessages.length === 0 && (
+        <div className="flex-1 flex flex-col items-center justify-center max-w-2xl mx-auto space-y-8 text-center py-10">
+            <div className="relative w-24 h-24">
                 <div className="absolute inset-0 bg-orange-500/20 blur-xl rounded-full animate-pulse"></div>
                 <div className="relative w-full h-full bg-[#2c2c2e] rounded-full flex items-center justify-center border border-orange-500/30">
                     <svg className="w-10 h-10 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
@@ -44,9 +82,8 @@ const GeminiInsight: React.FC<GeminiInsightProps> = ({ orders, userName }) => {
             <h3 className="text-3xl font-light text-[#fef3c7]">Kitchen Intelligence</h3>
             <p className="text-gray-400 leading-relaxed text-sm">
                Activate deep learning models to analyze your {orders.length} order records. 
-               We will break down your <span className="text-orange-400">Profitability</span>, 
-               optimize your <span className="text-orange-400">Menu Mix</span>, and analyze 
-               <span className="text-orange-400"> Commission Rates</span>.
+               Get insights on <span className="text-orange-400">Profitability</span>, 
+               <span className="text-orange-400"> Menu Optimization</span>, and ask custom questions.
             </p>
             <button
                 onClick={handleGenerateInsight}
@@ -58,14 +95,14 @@ const GeminiInsight: React.FC<GeminiInsightProps> = ({ orders, userName }) => {
       )}
 
       {loading && (
-          <div className="flex flex-col items-center gap-6 animate-pulse py-20">
+          <div className="flex-1 flex flex-col items-center justify-center gap-6 py-20">
               <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
               <p className="text-orange-200 font-mono text-xs uppercase tracking-widest">Processing {orders.length} records...</p>
           </div>
       )}
 
-      {insight && (
-        <div className="w-full max-w-6xl space-y-8 animate-fade-in">
+      {insight && chatMessages.length === 0 && (
+        <div className="w-full max-w-6xl mx-auto space-y-8 animate-fade-in flex-1">
           
           <div className="flex justify-between items-end border-b border-white/10 pb-4">
              <div>
@@ -143,7 +180,6 @@ const GeminiInsight: React.FC<GeminiInsightProps> = ({ orders, userName }) => {
                           {insight.customerInsights}
                       </p>
                   </div>
-
               </div>
           </div>
 
@@ -160,6 +196,69 @@ const GeminiInsight: React.FC<GeminiInsightProps> = ({ orders, userName }) => {
             </div>
           </div>
 
+          {/* Chat Starter */}
+          <div className="mt-8 pt-6 border-t border-white/10">
+            <p className="text-xs text-gray-400 mb-3">💬 Ask follow-up questions about your data:</p>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Interface */}
+      {(chatMessages.length > 0 || insight) && (
+        <div className="flex flex-col h-full max-w-4xl mx-auto w-full">
+          <div className="flex-1 bg-[#0a0a0a] rounded-lg border border-white/5 p-4 overflow-y-auto space-y-4 mb-4" style={{ maxHeight: '400px' }}>
+            {chatMessages.map((msg, idx) => (
+              <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg ${
+                  msg.role === 'user' 
+                    ? 'bg-orange-600 text-white' 
+                    : 'bg-[#2c2c2e] text-gray-200 border border-white/5'
+                }`}>
+                  <p className="text-sm leading-relaxed">{msg.content}</p>
+                  <p className="text-xs opacity-50 mt-1">{new Date(msg.timestamp).toLocaleTimeString()}</p>
+                </div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div className="flex justify-start">
+                <div className="bg-[#2c2c2e] px-4 py-3 rounded-lg border border-white/5">
+                  <div className="flex gap-2">
+                    <div className="w-2 h-2 bg-orange-500 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          <form onSubmit={handleAskQuestion} className="flex gap-2">
+            <input 
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Ask about your data..."
+              disabled={chatLoading || orders.length === 0}
+              className="flex-1 bg-[#121212] border border-white/10 rounded-lg px-4 py-3 text-[#fef3c7] placeholder-gray-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none text-sm disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={chatLoading || orders.length === 0 || !chatInput.trim()}
+              className="bg-orange-600 hover:bg-orange-500 disabled:bg-gray-700 text-white font-medium px-4 py-3 rounded-lg transition-all text-sm uppercase tracking-wider"
+            >
+              {chatLoading ? '...' : 'Ask'}
+            </button>
+            {chatMessages.length > 0 && (
+              <button
+                type="button"
+                onClick={() => { setChatMessages([]); setInsight(null); }}
+                className="text-orange-400 hover:text-orange-300 text-xs uppercase tracking-widest px-3 py-3"
+              >
+                Clear
+              </button>
+            )}
+          </form>
         </div>
       )}
     </div>

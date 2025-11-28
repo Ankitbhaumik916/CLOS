@@ -1,0 +1,113 @@
+import { ZomatoOrder } from '../types';
+
+/**
+ * QA Service - handles custom questions from user about their data using local/cloud AI.
+ */
+
+async function tryFetchJson(url: string, body: any) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) return await res.json();
+  return await res.text();
+}
+
+function buildDataContext(orders: ZomatoOrder[]): string {
+  const totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  const totalOrders = orders.length;
+  const avgRating = orders.filter(o => o.rating).length > 0 
+    ? (orders.filter(o => o.rating).reduce((sum, o) => sum + (o.rating || 0), 0) / orders.filter(o => o.rating).length).toFixed(2)
+    : 'N/A';
+
+  const itemsMap: Record<string, number> = {};
+  orders.forEach(o => {
+    if (o.items) {
+      const parts = o.items.split(',');
+      parts.forEach(p => {
+        const name = p.replace(/^\d+\s*[xX]\s*/, '').trim();
+        itemsMap[name] = (itemsMap[name] || 0) + 1;
+      });
+    }
+  });
+  const topItems = Object.entries(itemsMap).sort((a,b)=>b[1]-a[1]).slice(0,5).map(x => `${x[0]} (${x[1]} times)`).join(', ');
+
+  return `DATASET CONTEXT:
+- Total Orders: ${totalOrders}
+- Total Revenue: ₹${totalRevenue.toFixed(2)}
+- Average Rating: ${avgRating}/5
+- Top Items: ${topItems}
+- Zomato Commission Rate: ~35%
+- Net Revenue (approx): ₹${(totalRevenue * 0.65).toFixed(2)}`;
+}
+
+export async function askAI(question: string, orders: ZomatoOrder[], userName: string): Promise<string> {
+  const dataContext = buildDataContext(orders);
+  const baseUrl = (typeof window !== 'undefined' && localStorage.getItem('localAi.url')) || 'http://localhost:11434';
+  const exactUrl = (typeof window !== 'undefined' && localStorage.getItem('localAi.exactUrl')) || null;
+  const configuredModel = (typeof window !== 'undefined' && localStorage.getItem('localAi.model')) || 'llama3';
+
+  const prompt = `You are KitchenOS AI, a strategic analytics assistant for ${userName}'s cloud kitchen.
+
+${dataContext}
+
+USER QUESTION: ${question}
+
+INSTRUCTIONS:
+- Answer the question directly and concisely (2-3 sentences).
+- Use data context above to provide specific insights.
+- If the question is outside the scope of kitchen analytics, politely redirect to relevant topics.
+- Keep response under 200 words.`;
+
+  const tryEndpoints = exactUrl ? [exactUrl] : [
+    `${baseUrl}/api/generate`,
+    `${baseUrl}/api/completions`,
+    `${baseUrl}/v1/generate`,
+    `${baseUrl}/generate`,
+  ];
+
+  const body = {
+    model: configuredModel,
+    prompt,
+    max_tokens: 256,
+    temperature: 0.2,
+  };
+
+  let lastError: any = null;
+  for (const url of tryEndpoints) {
+    try {
+      const result = await tryFetchJson(url, body);
+      if (!result) continue;
+
+      if (typeof result === 'object') {
+        // Try various response shapes
+        if (result.response && typeof result.response === 'string') {
+          return result.response.trim();
+        }
+        if (result.text && typeof result.text === 'string') {
+          return result.text.trim();
+        }
+        if (result.completion && typeof result.completion === 'string') {
+          return result.completion.trim();
+        }
+        if (result.generations && Array.isArray(result.generations) && result.generations[0]?.text) {
+          return result.generations[0].text.trim();
+        }
+        if (result.choices && Array.isArray(result.choices) && result.choices[0]?.text) {
+          return result.choices[0].text.trim();
+        }
+      }
+
+      if (typeof result === 'string') {
+        return result.trim();
+      }
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw new Error('AI service unavailable: ' + (lastError?.message || 'unknown'));
+}
