@@ -1,4 +1,3 @@
 {
-  "buildCommand": "cd CLOS && npm run build",
-  "outputDirectory": "CLOS/dist"
+  "monorepoRoot": "CLOS"
 }

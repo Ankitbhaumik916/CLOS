@@ -1,7 +1,4 @@
 {
   "name": "cloudkitchen-ai-manager-root",
-  "private": true,
-  "workspaces": [
-    "CLOS"
-  ]
+  "private": true
 }
