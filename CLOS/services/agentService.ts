@@ -9,7 +9,9 @@ import { ZomatoOrder, InsightResponse } from '../types';
  * - This client will try a couple of common Ollama-style endpoints and fall back gracefully.
  */
 
-const DEFAULT_LOCAL_AI = 'http://127.0.0.1:11434';
+const DEFAULT_LOCAL_AI = 'http://localhost:11434';
+const LOCAL_AI_MODEL_KEY = 'localAi.model';
+const LOCAL_AI_EXACT_URL_KEY = 'localAi.exactUrl';
 
 async function tryFetchJson(url: string, body: any) {
   const res = await fetch(url, {
@@ -45,18 +47,21 @@ function buildPrompt(orders: ZomatoOrder[], userName: string) {
 
 export async function analyzeWithLocalModel(orders: ZomatoOrder[], userName: string): Promise<InsightResponse> {
   const baseUrl = (typeof window !== 'undefined' && localStorage.getItem('localAi.url')) || DEFAULT_LOCAL_AI;
+  const exactUrl = (typeof window !== 'undefined' && localStorage.getItem(LOCAL_AI_EXACT_URL_KEY)) || null;
   const prompt = buildPrompt(orders, userName);
 
-  // Try common Ollama-style endpoint: /api/generate
-  const tryEndpoints = [
+  // If an exact URL is provided, try only that. Otherwise try common Ollama-style endpoints.
+  const tryEndpoints = exactUrl ? [exactUrl] : [
     `${baseUrl}/api/generate`,
     `${baseUrl}/api/completions`,
     `${baseUrl}/v1/generate`,
     `${baseUrl}/generate`,
   ];
 
+  // Allow the model name to be configured via localStorage (useful for Llama3)
+  const configuredModel = (typeof window !== 'undefined' && localStorage.getItem(LOCAL_AI_MODEL_KEY)) || 'phi-3mini';
   const body = {
-    model: 'phi-3mini',
+    model: configuredModel,
     prompt,
     max_tokens: 1024,
     temperature: 0.2,
