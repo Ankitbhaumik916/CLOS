@@ -133,30 +133,46 @@ function localAnswerFallback(question: string, orders: ZomatoOrder[]): string {
   });
   const topItems = Object.entries(itemsMap).sort((a,b)=>b[1]-a[1]);
 
-  if (q.includes('top item') || q.includes('top items') || q.includes('best seller')) {
-    if (topItems.length === 0) return 'No item data available in the uploaded dataset.';
+  if (q.includes('top item') || q.includes('top items') || q.includes('best seller') || q.includes('popular')) {
+    if (topItems.length === 0) return 'No item data in your dataset.';
     const top = topItems.slice(0,3).map(t => `${t[0]} (${t[1]} orders)`).join(', ');
-    return `Top items: ${top}. Promote these to increase revenue.`;
+    return `Your best sellers are: ${top}. Consider promoting these items to boost revenue.`;
   }
 
-  if (q.includes('revenue') || q.includes('gross')) {
-    return `Total revenue from uploaded data is ₹${totalRevenue.toFixed(2)} across ${totalOrders} orders.`;
+  if (q.includes('revenue') || q.includes('gross') || q.includes('total')) {
+    return `Total revenue: ₹${totalRevenue.toFixed(2)} from ${totalOrders} orders. Average order value: ₹${(totalRevenue/totalOrders).toFixed(2)}.`;
   }
 
-  if (q.includes('rating') || q.includes('customer')) {
+  if (q.includes('rating') || q.includes('customer') || q.includes('satisfaction')) {
     const rated = orders.filter(o => typeof o.rating === 'number');
-    if (rated.length === 0) return 'No ratings present in dataset.';
+    if (rated.length === 0) return 'No rating data available yet. Encourage customers to rate orders.';
     const avg = (rated.reduce((s,o) => s + (o.rating||0), 0) / rated.length).toFixed(2);
-    return `Average rating is ${avg}/5 based on ${rated.length} ratings. Focus on consistent quality and delivery times to improve.`;
+    return `Average rating: ${avg}/5 from ${rated.length} rated orders. Focus on consistency to improve.`;
   }
 
-  if (q.includes('profit') || q.includes('zomato') || q.includes('commission')) {
+  if (q.includes('profit') || q.includes('zomato') || q.includes('commission') || q.includes('net')) {
     const commission = totalRevenue * 0.35;
     const net = totalRevenue - commission;
-    return `Estimated gross revenue ₹${totalRevenue.toFixed(2)}; Zomato commission ~₹${commission.toFixed(2)}; estimated net ₹${net.toFixed(2)}.`;
+    return `Gross: ₹${totalRevenue.toFixed(2)} | Zomato cut (35%): ₹${commission.toFixed(2)} | Your net: ₹${net.toFixed(2)}.`;
   }
 
-  // Generic fallback
-  const sampleInsight = topItems.length > 0 ? `${topItems.slice(0,3).map(t=>t[0]).join(', ')}` : 'No item data';
-  return `I couldn't reach the AI model, but here's a quick local insight: ${sampleInsight}. For precise answers please ensure the local LLM is running or enable the cloud API.`;
+  if (q.includes('low') || q.includes('bad') || q.includes('improve') || q.includes('increase')) {
+    const rated = orders.filter(o => typeof o.rating === 'number');
+    if (rated.length > 0) {
+      const avg = rated.reduce((s,o) => s + (o.rating||0), 0) / rated.length;
+      if (avg < 4) return 'Your ratings are below 4/5. Prioritize faster delivery and consistent quality to improve customer satisfaction.';
+    }
+    if (topItems.length > 0) {
+      const lowSellers = topItems.slice(-3).map(t => t[0]).join(', ');
+      return `Low-performing items: ${lowSellers}. Consider removing or repositioning these on your menu.`;
+    }
+    return 'Review your operations for delivery speed and food quality improvements.';
+  }
+
+  // Generic fallback with top item suggestion
+  if (topItems.length > 0) {
+    return `Based on your data: ${topItems[0][0]} is your top seller. Total orders: ${totalOrders}, Revenue: ₹${totalRevenue.toFixed(2)}.`;
+  }
+  
+  return `Dataset has ${totalOrders} orders with ₹${totalRevenue.toFixed(2)} revenue. For detailed AI insights, ensure your local LLM is running.`;
 }
