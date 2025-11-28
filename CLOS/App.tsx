@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard';
 import DataGrid from './components/DataGrid';
 import GeminiInsight from './components/GeminiInsight';
 import Login from './components/Login';
+import Settings from './components/Settings';
 import { parseCSV } from './services/csvService';
 import { storageService } from './services/storageService';
 import { authService } from './services/authService';
@@ -16,6 +17,7 @@ const App: React.FC = () => {
   const [orders, setOrders] = useState<ZomatoOrder[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isUploading, setIsUploading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Load User Session & Orders on Mount
   useEffect(() => {
@@ -151,6 +153,9 @@ const App: React.FC = () => {
              <button onClick={handleLogout} className="text-[10px] font-bold text-gray-500 hover:text-[#fef3c7] ml-2 uppercase tracking-wider">
                 Logout
              </button>
+            <button onClick={() => setShowSettings(true)} title="Settings" className="text-[10px] font-bold text-gray-500 hover:text-[#fef3c7] ml-2 uppercase tracking-wider">
+              Settings
+            </button>
           </div>
         </div>
       </header>
@@ -225,6 +230,7 @@ const App: React.FC = () => {
            </div>
         )}
       </main>
+        {showSettings && <Settings onClose={() => setShowSettings(false)} />}
     </div>
   );
 };
