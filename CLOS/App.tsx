@@ -53,6 +53,42 @@ const App: React.FC = () => {
     }
   };
 
+  const handleExportData = () => {
+    try {
+      const data = storageService.loadOrders();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `clos_orders_${user?.email || 'guest'}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed', err);
+      alert('Failed to export data.');
+    }
+  };
+
+  const handleImportJson = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as ZomatoOrder[];
+      const merged = storageService.saveOrders(parsed);
+      setOrders(merged);
+      alert('Import successful.');
+    } catch (err) {
+      console.error('Import failed', err);
+      alert('Failed to import JSON data. Ensure it matches expected format.');
+    } finally {
+      // clear the input so same file can be selected again
+      (e.target as HTMLInputElement).value = '';
+    }
+  };
+
   const handleLogout = () => {
     authService.logout();
     setUser(null);
@@ -82,9 +118,14 @@ const App: React.FC = () => {
           
           <div className="flex items-center gap-3">
              {orders.length > 0 && (
-                <button onClick={handleClearData} className="text-[10px] text-red-400 hover:text-red-300 font-medium px-3 py-2 transition-colors uppercase tracking-wider">
-                  Purge DB
-                </button>
+                <>
+                  <button onClick={handleClearData} className="text-[10px] text-red-400 hover:text-red-300 font-medium px-3 py-2 transition-colors uppercase tracking-wider">
+                    Purge DB
+                  </button>
+                  <button onClick={() => handleExportData()} className="text-[10px] text-gray-300 hover:text-gray-100 font-medium px-3 py-2 transition-colors uppercase tracking-wider">
+                    Export Data
+                  </button>
+                </>
              )}
              
              <label className={`cursor-pointer px-4 py-2 rounded-lg font-bold text-[10px] uppercase tracking-widest transition-all border flex items-center gap-2 ${
@@ -99,6 +140,12 @@ const App: React.FC = () => {
                   </>
                 )}
                 <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+             </label>
+
+             {/* Hidden input for importing a previous export (JSON) */}
+             <label className="text-[10px] text-gray-400 hover:text-gray-200 font-medium px-3 py-2 transition-colors uppercase tracking-wider cursor-pointer">
+               Import Data
+               <input id="importJson" type="file" accept="application/json" className="hidden" onChange={handleImportJson} />
              </label>
 
              <button onClick={handleLogout} className="text-[10px] font-bold text-gray-500 hover:text-[#fef3c7] ml-2 uppercase tracking-wider">

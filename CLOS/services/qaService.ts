@@ -109,5 +109,54 @@ INSTRUCTIONS:
     }
   }
 
-  throw new Error('AI service unavailable: ' + (lastError?.message || 'unknown'));
+  // If remote/local model calls fail, use a deterministic local fallback
+  try {
+    return localAnswerFallback(question, orders);
+  } catch (e) {
+    throw new Error('AI service unavailable: ' + (lastError?.message || 'unknown'));
+  }
+}
+
+function localAnswerFallback(question: string, orders: ZomatoOrder[]): string {
+  // Simple heuristic-based answers using dataset
+  const q = question.toLowerCase();
+  const totalRevenue = orders.reduce((s, o) => s + (o.totalAmount || 0), 0);
+  const totalOrders = orders.length;
+  const itemsMap: Record<string, number> = {};
+  orders.forEach(o => {
+    if (o.items) {
+      o.items.split(',').forEach(p => {
+        const name = p.replace(/^\d+\s*[xX]\s*/, '').trim();
+        if (name) itemsMap[name] = (itemsMap[name] || 0) + 1;
+      });
+    }
+  });
+  const topItems = Object.entries(itemsMap).sort((a,b)=>b[1]-a[1]);
+
+  if (q.includes('top item') || q.includes('top items') || q.includes('best seller')) {
+    if (topItems.length === 0) return 'No item data available in the uploaded dataset.';
+    const top = topItems.slice(0,3).map(t => `${t[0]} (${t[1]} orders)`).join(', ');
+    return `Top items: ${top}. Promote these to increase revenue.`;
+  }
+
+  if (q.includes('revenue') || q.includes('gross')) {
+    return `Total revenue from uploaded data is ₹${totalRevenue.toFixed(2)} across ${totalOrders} orders.`;
+  }
+
+  if (q.includes('rating') || q.includes('customer')) {
+    const rated = orders.filter(o => typeof o.rating === 'number');
+    if (rated.length === 0) return 'No ratings present in dataset.';
+    const avg = (rated.reduce((s,o) => s + (o.rating||0), 0) / rated.length).toFixed(2);
+    return `Average rating is ${avg}/5 based on ${rated.length} ratings. Focus on consistent quality and delivery times to improve.`;
+  }
+
+  if (q.includes('profit') || q.includes('zomato') || q.includes('commission')) {
+    const commission = totalRevenue * 0.35;
+    const net = totalRevenue - commission;
+    return `Estimated gross revenue ₹${totalRevenue.toFixed(2)}; Zomato commission ~₹${commission.toFixed(2)}; estimated net ₹${net.toFixed(2)}.`;
+  }
+
+  // Generic fallback
+  const sampleInsight = topItems.length > 0 ? `${topItems.slice(0,3).map(t=>t[0]).join(', ')}` : 'No item data';
+  return `I couldn't reach the AI model, but here's a quick local insight: ${sampleInsight}. For precise answers please ensure the local LLM is running or enable the cloud API.`;
 }
